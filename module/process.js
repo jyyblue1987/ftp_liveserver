@@ -60,7 +60,7 @@ function spyFileChanges()
         ignored: /[\/\\]\./, 
         persistent: true,
         awaitWriteFinish: {
-            stabilityThreshold: 2000,
+            stabilityThreshold: 20000,
             pollInterval: 100
         },
     });
