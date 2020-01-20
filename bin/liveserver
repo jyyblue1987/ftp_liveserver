@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+/**
+ * Module dependencies.
+ */
+var fs = require('fs');
+var app = require('../app');
+var debug = require('debug')('LiveServer:server');
+var http = require('http');
+var https = require('https');
+var os = require('os');
+var privateKey  = '';
+var certificate = '';
+var osname = os.platform(); // 'win32', "Linux"
+if(osname == 'win32' || osname == 'win64' ) {
+   //privateKey  = fs.readFileSync('sslcert/server.key', 'utf8');
+   //certificate = fs.readFileSync('sslcert/server.crt', 'utf8');
+}else {
+  privateKey  = fs.readFileSync('sslcert/server.pem');
+  certificate = fs.readFileSync('sslcert/server.crt');
+}
+
+var credentials = {key: privateKey, cert: certificate};
+
+/**
+ * Get port from environment and store in Express.
+ */
+var port = normalizePort(process.env.PORT || '9001');
+
+var server = null;
+
+if( process.argv.length < 3 || process.argv.slice(2) != 'secure' )
+{
+    port = normalizePort(process.env.PORT || '9001');
+    app.set('port', port);
+
+    // http mode
+    // Create HTTP server.
+    server = http.createServer(app);
+    console.log('Run Server with http');
+}
+else
+{
+    port = normalizePort(process.env.PORT || '9002');
+    // https mode
+    // Create HTTP server.
+    server = https.createServer(credentials, app);
+
+    console.log('Run Server with https');
+}
+
+server.listen(port);
+
+// upgrade http server to socket.io server
+
+global.io = require('socket.io').listen(server);
+
+server.on('error', onError);
+server.on('listening', onListening);
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+  console.log('Listening on ' + bind);
+}
+
