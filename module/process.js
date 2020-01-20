@@ -5,6 +5,10 @@ var mysql   = require('mysql');
 var xml2js   = require("xml2js");
 var parser = new xml2js.Parser();
 var chokidar = require('chokidar');
+var sharp = require('sharp');
+var cr2Raw = require('cr2-raw');
+var sprintf = require("sprintf-js").sprintf,
+    vsprintf = require("sprintf-js").vsprintf;
 
 var xml = fs.readFileSync('config.xml', 'utf-8');
 
@@ -16,6 +20,8 @@ parser.parseString(xml, function(err, result) {
     config.MYSQL_CONFIG.password = result.settings.db_password[0];
     config.MYSQL_CONFIG.database = result.settings.db_name[0];
     config.FTP_DIR = result.settings.ftp_dir[0];
+    config.FTP_DEST_DIR = result.settings.ftp_dest_dir[0];
+    config.UPLOAD_DIR = result.settings.upload_dir[0];
 
     handleDisconnect();
 });
@@ -47,6 +53,9 @@ function handleDisconnect() {
 function spyFileChanges()
 {
     var ftp_dir = config.FTP_DIR;
+    var ftp_dest_dir = config.FTP_DEST_DIR;
+    var upload_dir = config.UPLOAD_DIR + '/img';
+
     var watcher = chokidar.watch(ftp_dir, {
         ignored: /[\/\\]\./, 
         persistent: true,
@@ -59,6 +68,56 @@ function spyFileChanges()
     watcher.on('add', function(path) {
         console.log('File', path, 'has been added');
         var filename = pathname.basename(path);
+        var ext = pathname.extname(path);
+
+        var dir_name = pathname.dirname(path).split(pathname.sep).pop();
+        var filename_only = pathname.basename(path, ext);
+
+        var dest_path = '';
+
+        var dest_dir = ftp_dest_dir + '/' + dir_name; 
+        if (!fs.existsSync(dest_dir)){
+            fs.mkdirSync(dest_dir);
+        }
+
+        if( ext.toLowerCase() == '.cr2')
+        {
+            console.log(path);
+
+            dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename_only + ".png";
+
+            var raw = cr2Raw(path);
+            fs.writeFileSync(dest_path, raw.previewImage());
+
+            fs.unlinkSync(path);
+        }
+        else
+        {
+            dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename;
+
+            fs.rename(path, dest_path,function(err) {
+                if ( err ) 
+                {
+                    console.log(err);
+                }                
+            });
+        }
+
+        var thumb_dir = upload_dir + '/' + dir_name; 
+        if (!fs.existsSync(thumb_dir)){
+            fs.mkdirSync(thumb_dir);
+        }
+
+        var thumb_filename = filename_only + "_thumbnail.jpg";
+        var thumb_path = upload_dir + '/' + dir_name + '/' + thumb_filename;
+
+        sharp(dest_path)
+            .resize(320, 240)
+            .toFile(thumb_path, (err, info) => { 
+                console.log(info);
+                checkCameraImageInfo(dir_name, thumb_filename, dest_path);                
+            });
+        
     })
     .on('addDir', function(path) {console.log('Directory', path, 'has been added');})
     .on('change', function(path) {console.log('File', path, 'has been changed');})
@@ -72,3 +131,43 @@ function spyFileChanges()
         console.log('File', path, 'changed size to', stats.size);       
     });    
 }
+
+function checkCameraImageInfo(camera_id, filename, path)
+{
+    var sql = sprintf("SELECT * from camera_logs where camera_id = %s and thumbnail = '%s/%s'", camera_id, camera_id, filename);
+
+    global.connection.query(sql, function(err, rows, fields) {
+        if(err) {                                     // or restarting (takes a while sometimes).
+            console.log('error when connecting to db:', err);
+            return;
+        }
+        if( rows && rows.length > 0 )
+            updateCameraImageInfo(rows[0].id, camera_id, filename, path);
+        else    
+            addCameraImageInfo(camera_id, filename, path);
+    });
+}
+
+function addCameraImageInfo(camera_id, filename, path)
+{
+    var sql = sprintf("INSERT INTO camera_logs (camera_id, thumbnail, path) VALUES(%s, '/img/%s/%s', '%s')",
+                        camera_id, camera_id, filename, path);
+    if(global.connection)
+    {
+        global.connection.query(sql, function (err, rows, fields) {
+        });
+    }
+}
+
+function updateCameraImageInfo(id, camera_id, filename, path)
+{
+    var sql = sprintf("UPDATE camera_logs SET camera_id = %s, thumbnail = '/img/%s/%s', path = '%s' WHERE id = %s",
+                        camera_id, camera_id, filename, path, id);
+    
+    if(global.connection)
+    {
+        global.connection.query(sql, function (err, rows, fields) {
+        });
+    }
+}
+

@@ -9,6 +9,7 @@
     "body-parser": "~1.15.1",
     "chokidar": "^3.3.1",
     "cookie-parser": "~1.4.3",
+    "cr2-raw": "^1.1.0",
     "cron": "^1.1.1",
     "debug": "^4.1.1",
     "ejs": "~2.4.1",
@@ -19,8 +20,10 @@
     "node-crontab": "0.0.8",
     "request": "^2.88.0",
     "sha1": "^1.1.1",
+    "sharp": "^0.24.0",
     "socket.io": "^2.2.0",
     "socket.io-client": "^2.2.0",
+    "sprintf-js": "^1.1.2",
     "xml2js": "^0.4.23"
   }
 }
