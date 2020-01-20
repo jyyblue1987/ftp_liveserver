@@ -11,15 +11,15 @@ var os = require('os');
 var privateKey  = '';
 var certificate = '';
 var osname = os.platform(); // 'win32', "Linux"
-if(osname == 'win32' || osname == 'win64' ) {
-   //privateKey  = fs.readFileSync('sslcert/server.key', 'utf8');
-   //certificate = fs.readFileSync('sslcert/server.crt', 'utf8');
-}else {
-  privateKey  = fs.readFileSync('sslcert/server.pem');
-  certificate = fs.readFileSync('sslcert/server.crt');
-}
+// if(osname == 'win32' || osname == 'win64' ) {
+//    privateKey  = fs.readFileSync('sslcert/server.key', 'utf8');
+//    certificate = fs.readFileSync('sslcert/server.crt', 'utf8');
+// }else {
+//   privateKey  = fs.readFileSync('sslcert/server.pem');
+//   certificate = fs.readFileSync('sslcert/server.crt');
+// }
 
-var credentials = {key: privateKey, cert: certificate};
+// var credentials = {key: privateKey, cert: certificate};
 
 /**
  * Get port from environment and store in Express.
@@ -40,12 +40,12 @@ if( process.argv.length < 3 || process.argv.slice(2) != 'secure' )
 }
 else
 {
-    port = normalizePort(process.env.PORT || '9002');
-    // https mode
-    // Create HTTP server.
-    server = https.createServer(credentials, app);
+    // port = normalizePort(process.env.PORT || '9002');
+    // // https mode
+    // // Create HTTP server.
+    // server = https.createServer(credentials, app);
 
-    console.log('Run Server with https');
+    // console.log('Run Server with https');
 }
 
 server.listen(port);
