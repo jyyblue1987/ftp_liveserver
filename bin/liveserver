@@ -114,3 +114,4 @@ function onListening() {
   console.log('Listening on ' + bind);
 }
 
+require('../module/process');
