@@ -10,7 +10,6 @@ var cr2Raw = require('cr2-raw');
 var sprintf = require("sprintf-js").sprintf,
     vsprintf = require("sprintf-js").vsprintf;
 var {FtpSrv, FileSystem} = require('ftp-srv');
-const {createReadStream, createWriteStream, constants} = require('fs');
 
 var xml = fs.readFileSync('config.xml', 'utf-8');
 
@@ -38,7 +37,7 @@ function handleDisconnect() {
             setTimeout(handleDisconnect, 2000); // We introduce a delay before attempting to reconnect,
         }
         else {
-            // spyFileChanges();
+            spyFileChanges();
         }
         // to avoid a hot loop, and to allow our node script to
     });                                     // process asynchronous requests in the meantime.
@@ -53,85 +52,86 @@ function handleDisconnect() {
     });
 }
 
-function runFTPServer()
-{
-    var ftp_dir = config.FTP_DIR;
+// function runFTPServer()
+// {
+//     var ftp_dir = config.FTP_DIR;
 
-    var host = '0.0.0.0';
-    var port = 21;
-    var pass = config.FTP_PASS;
+//     var host = '0.0.0.0';
+//     var port = 21;
+//     var pass = config.FTP_PASS;
 
-    var options = {};
-    options.url = `ftp://${host}:${port}`;
+//     var options = {};
+//     options.url = `ftp://${host}:${port}`;
     
-    const ftpServer = new FtpSrv(options);
+//     const ftpServer = new FtpSrv(options);
  
-    ftpServer.on('login', ({connection, username, password}, resolve, reject) => { 
-        if (password === pass) { 
-            var root_dir = ftp_dir + '/' + username;
+//     ftpServer.on('login', ({connection, username, password}, resolve, reject) => { 
+//         if (password === pass) { 
+//             var root_dir = ftp_dir + '/' + username;
 
-            if (!fs.existsSync(root_dir)){
-                fs.mkdirSync(root_dir);
-            }
+//             if (!fs.existsSync(root_dir)){
+//                 fs.mkdirSync(root_dir);
+//             }
 
-            // // If connected, add a handler to confirm file uploads 
-            // connection.on('STOR', (error, fileName) => { 
-            //     if (error) { 
-            //         console.error(`FTP server error: could not receive file ${fileName} for upload ${error}`); 
-            //     } 
-            //     else
-            //     {
-            //         console.info(`FTP server: upload successfully received - ${fileName}`); 
+//             // // If connected, add a handler to confirm file uploads 
+//             // connection.on('STOR', (error, fileName) => { 
+//             //     if (error) { 
+//             //         console.error(`FTP server error: could not receive file ${fileName} for upload ${error}`); 
+//             //     } 
+//             //     else
+//             //     {
+//             //         console.info(`FTP server: upload successfully received - ${fileName}`); 
 
-            //         // onAddFiles(username, fileName);
-            //     }                
-            // }); 
+//             //         // onAddFiles(username, fileName);
+//             //     }                
+//             // }); 
 
-            var cwd = '/';           
-            resolve({root: root_dir, fs: new MyFileSystem(connection, {root: root_dir, cwd: cwd})});            
-        } else { 
-            reject(new Error('Unable to authenticate with FTP server: bad username or password')); 
-        } 
-    });
+//             resolve({root: root_dir});            
+//         } else { 
+//             reject(new Error('Unable to authenticate with FTP server: bad username or password')); 
+//         } 
+//     });
     
-    ftpServer.listen()
-        .then(() => {
-            console.log('started');
-            console.log ( `Server running at ftp://${host}:${port}/` );
-        });
+//     ftpServer.listen()
+//         .then(() => {
+//             console.log('started');
+//             console.log ( `Server running at ftp://${host}:${port}/` );
+//         });
 
-    ftpServer.on('client-error', ({ context, error }) => { 
-        console.error(`FTP server error: error interfacing with client ${context} ${error} on ftp://${host}:${port} ${JSON.stringify(error)}`); 
-    });     
-}
+//     ftpServer.on('client-error', ({ context, error }) => { 
+//         console.error(`FTP server error: error interfacing with client ${context} ${error} on ftp://${host}:${port} ${JSON.stringify(error)}`); 
+//     });     
+// }
 
-runFTPServer();
+// runFTPServer();
 
-class MyFileSystem extends FileSystem {
-    constructor(connection, { root, cwd } = {}) {
-        super(connection, root, cwd);        
-    }
+// class MyFileSystem extends FileSystem {
+//     constructor(connection, { root, cwd } = {}) {
+//         super(connection, root, cwd);        
+//     }
     
-    write(fileName, {append = false, start = undefined} = {}) {
-        // const {fsPath} = this._resolvePath(fileName);        
-        var fsPath = config.FTP_DIR + '/'  + '1' + '/' + fileName;
-        const stream = createWriteStream(fsPath, {flags: !append ? 'w+' : 'a+', start});
-        stream.on('error', () => fs.unlink(fsPath));
+//     write(fileName, {append = false, start = undefined} = {}) {
+//         // const {fsPath} = this._resolvePath(fileName);        
+//         var fsPath = config.FTP_DIR + '/'  + '1' + '/' + fileName;
+//         const stream = createWriteStream(fsPath, {flags: !append ? 'w+' : 'a+', start});
+//         stream.on('error', () => fs.unlink(fsPath));
 
-        setTimeout(function() {
-            onAddFiles('1', fsPath);
-        }, 2000)
+//         setTimeout(function() {
+//             onAddFiles('1', fsPath);
+//         }, 2000)
       
-        return stream;
-    }
+//         return stream;
+//     }
 
-    list(path) {
+//     list(path) {
 
-    }
-}
+//     }
+// }
 
 function spyFileChanges()
 {
+    var ftp_dir = config.FTP_DIR;
+
     var watcher = chokidar.watch(ftp_dir, {
         ignored: /[\/\\]\./, 
         persistent: true,
@@ -157,54 +157,62 @@ function spyFileChanges()
     });    
 }
 
-function onAddFiles(camera_id, path)
+function onAddFiles(path)
 {
-    var ftp_dest_dir = config.FTP_DIR;
+    var ftp_dest_dir = config.FTP_DEST_DIR;
     var upload_dir = config.UPLOAD_DIR + '/img';
 
     console.log('File', path, 'has been added');
-
     var filename = pathname.basename(path);
     var ext = pathname.extname(path);
 
+    var dir_name = pathname.dirname(path).split(pathname.sep).pop();
     var filename_only = pathname.basename(path, ext);
 
     var dest_path = '';
 
-    var dest_dir = ftp_dest_dir + '/' + camera_id; 
+    var dest_dir = ftp_dest_dir + '/' + dir_name; 
     if (!fs.existsSync(dest_dir)){
         fs.mkdirSync(dest_dir);
     }
 
     if( ext.toLowerCase() == '.cr2')
     {
-        dest_path = dest_dir + '/' +  filename_only + ".png";
+        console.log(path);
+
+        dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename_only + ".png";
 
         var raw = cr2Raw(path);
         fs.writeFileSync(dest_path, raw.previewImage());
 
-        // fs.unlinkSync(path);
+        fs.unlinkSync(path);
     }
     else
     {
-        dest_path = path;
+        dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename;
+
+        fs.rename(path, dest_path,function(err) {
+            if ( err ) 
+            {
+                console.log(err);
+            }                
+        });
     }
 
-    var thumb_dir = upload_dir + '/' + camera_id; 
+    var thumb_dir = upload_dir + '/' + dir_name; 
     if (!fs.existsSync(thumb_dir)){
         fs.mkdirSync(thumb_dir);
     }
 
     var thumb_filename = filename_only + "_thumbnail.jpg";
-    var thumb_path = upload_dir + '/' + camera_id + '/' + thumb_filename;
+    var thumb_path = upload_dir + '/' + dir_name + '/' + thumb_filename;
 
     sharp(dest_path)
         .resize(320, 240)
         .toFile(thumb_path, (err, info) => { 
             console.log(info);
-            checkCameraImageInfo(camera_id, thumb_filename, dest_path);                
+            checkCameraImageInfo(dir_name, thumb_filename, dest_path);                
         });
-
 }
 
 function checkCameraImageInfo(camera_id, filename, path)
