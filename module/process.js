@@ -12,6 +12,7 @@ var sprintf = require("sprintf-js").sprintf,
 var {FtpSrv, FileSystem} = require('ftp-srv');
 
 var xml = fs.readFileSync('config.xml', 'utf-8');
+const { exec } = require('child_process');
 
 parser.parseString(xml, function(err, result) {
     console.log(result);
@@ -24,6 +25,23 @@ parser.parseString(xml, function(err, result) {
     config.FTP_DIR = result.settings.ftp_dir[0];
     config.FTP_DEST_DIR = result.settings.ftp_dest_dir[0];
     config.UPLOAD_DIR = result.settings.upload_dir[0];
+
+    dir = config.FTP_DIR + '/4';
+    if (!fs.existsSync(dir)){
+        fs.mkdirSync(dir);
+    }
+
+    exec('sudo chown ftpuser:ftpuser ' + dir, (err, stdout, stderr) => {
+        if (err) {
+            //some err occurred
+            console.error(err)
+        } else {
+            // the *entire* stdout and stderr (buffered)
+            console.log(`stdout: ${stdout}`);
+            console.log(`stderr: ${stderr}`);
+        }
+    });
+
 
     handleDisconnect();
 });
