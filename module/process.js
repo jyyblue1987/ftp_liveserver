@@ -9,6 +9,7 @@ var sharp = require('sharp');
 var cr2Raw = require('cr2-raw');
 var sprintf = require("sprintf-js").sprintf,
     vsprintf = require("sprintf-js").vsprintf;
+var FtpSrv = require('ftp-srv');
 
 var xml = fs.readFileSync('config.xml', 'utf-8');
 
@@ -19,6 +20,7 @@ parser.parseString(xml, function(err, result) {
     config.MYSQL_CONFIG.user = result.settings.db_user[0];
     config.MYSQL_CONFIG.password = result.settings.db_password[0];
     config.MYSQL_CONFIG.database = result.settings.db_name[0];
+    config.FTP_PASS = result.settings.ftp_pass[0];
     config.FTP_DIR = result.settings.ftp_dir[0];
     config.FTP_DEST_DIR = result.settings.ftp_dest_dir[0];
     config.UPLOAD_DIR = result.settings.upload_dir[0];
@@ -35,7 +37,7 @@ function handleDisconnect() {
             setTimeout(handleDisconnect, 2000); // We introduce a delay before attempting to reconnect,
         }
         else {
-            spyFileChanges();
+            // spyFileChanges();
         }
         // to avoid a hot loop, and to allow our node script to
     });                                     // process asynchronous requests in the meantime.
@@ -50,12 +52,61 @@ function handleDisconnect() {
     });
 }
 
-function spyFileChanges()
+function runFTPServer()
 {
     var ftp_dir = config.FTP_DIR;
-    var ftp_dest_dir = config.FTP_DEST_DIR;
-    var upload_dir = config.UPLOAD_DIR + '/img';
 
+    var host = '0.0.0.0';
+    var port = 21;
+    var pass = config.FTP_PASS;
+
+    var options = {};
+    options.url = `ftp://${host}:${port}`;
+    
+    const ftpServer = new FtpSrv(options);
+ 
+    ftpServer.on('login', ({connection, username, password}, resolve, reject) => { 
+        if (password === pass) { 
+            var root_dir = ftp_dir + '/' + username;
+
+            if (!fs.existsSync(root_dir)){
+                fs.mkdirSync(root_dir);
+            }
+
+            // If connected, add a handler to confirm file uploads 
+            connection.on('STOR', (error, fileName) => { 
+                if (error) { 
+                    console.error(`FTP server error: could not receive file ${fileName} for upload ${error}`); 
+                } 
+                else
+                {
+                    console.info(`FTP server: upload successfully received - ${fileName}`); 
+
+                    onAddFiles(username, fileName);
+                }                
+            }); 
+           
+            resolve({root: root_dir});            
+        } else { 
+            reject(new Error('Unable to authenticate with FTP server: bad username or password')); 
+        } 
+    });
+    
+    ftpServer.listen()
+        .then(() => {
+            console.log('started');
+            console.log ( `Server running at ftp://${host}:${port}/` );
+        });
+
+    ftpServer.on('client-error', ({ context, error }) => { 
+        console.error(`FTP server error: error interfacing with client ${context} ${error} on ftp://${host}:${port} ${JSON.stringify(error)}`); 
+    });     
+}
+
+runFTPServer();
+
+function spyFileChanges()
+{
     var watcher = chokidar.watch(ftp_dir, {
         ignored: /[\/\\]\./, 
         persistent: true,
@@ -66,58 +117,7 @@ function spyFileChanges()
     });
 
     watcher.on('add', function(path) {
-        console.log('File', path, 'has been added');
-        var filename = pathname.basename(path);
-        var ext = pathname.extname(path);
-
-        var dir_name = pathname.dirname(path).split(pathname.sep).pop();
-        var filename_only = pathname.basename(path, ext);
-
-        var dest_path = '';
-
-        var dest_dir = ftp_dest_dir + '/' + dir_name; 
-        if (!fs.existsSync(dest_dir)){
-            fs.mkdirSync(dest_dir);
-        }
-
-        if( ext.toLowerCase() == '.cr2')
-        {
-            console.log(path);
-
-            dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename_only + ".png";
-
-            var raw = cr2Raw(path);
-            fs.writeFileSync(dest_path, raw.previewImage());
-
-            fs.unlinkSync(path);
-        }
-        else
-        {
-            dest_path = ftp_dest_dir + '/' + dir_name + '/' +  filename;
-
-            fs.rename(path, dest_path,function(err) {
-                if ( err ) 
-                {
-                    console.log(err);
-                }                
-            });
-        }
-
-        var thumb_dir = upload_dir + '/' + dir_name; 
-        if (!fs.existsSync(thumb_dir)){
-            fs.mkdirSync(thumb_dir);
-        }
-
-        var thumb_filename = filename_only + "_thumbnail.jpg";
-        var thumb_path = upload_dir + '/' + dir_name + '/' + thumb_filename;
-
-        sharp(dest_path)
-            .resize(320, 240)
-            .toFile(thumb_path, (err, info) => { 
-                console.log(info);
-                checkCameraImageInfo(dir_name, thumb_filename, dest_path);                
-            });
-        
+        onAddFiles(path);
     })
     .on('addDir', function(path) {console.log('Directory', path, 'has been added');})
     .on('change', function(path) {console.log('File', path, 'has been changed');})
@@ -130,6 +130,56 @@ function spyFileChanges()
     watcher.on('change', function(path, stats) {
         console.log('File', path, 'changed size to', stats.size);       
     });    
+}
+
+function onAddFiles(camera_id, path)
+{
+    var ftp_dest_dir = config.FTP_DIR;
+    var upload_dir = config.UPLOAD_DIR + '/img';
+
+    console.log('File', path, 'has been added');
+
+    var filename = pathname.basename(path);
+    var ext = pathname.extname(path);
+
+    var filename_only = pathname.basename(path, ext);
+
+    var dest_path = '';
+
+    var dest_dir = ftp_dest_dir + '/' + camera_id; 
+    if (!fs.existsSync(dest_dir)){
+        fs.mkdirSync(dest_dir);
+    }
+
+    if( ext.toLowerCase() == '.cr2')
+    {
+        dest_path = dest_dir + '/' +  filename_only + ".png";
+
+        var raw = cr2Raw(path);
+        fs.writeFileSync(dest_path, raw.previewImage());
+
+        // fs.unlinkSync(path);
+    }
+    else
+    {
+        dest_path = path;
+    }
+
+    var thumb_dir = upload_dir + '/' + camera_id; 
+    if (!fs.existsSync(thumb_dir)){
+        fs.mkdirSync(thumb_dir);
+    }
+
+    var thumb_filename = filename_only + "_thumbnail.jpg";
+    var thumb_path = upload_dir + '/' + camera_id + '/' + thumb_filename;
+
+    sharp(dest_path)
+        .resize(320, 240)
+        .toFile(thumb_path, (err, info) => { 
+            console.log(info);
+            checkCameraImageInfo(camera_id, thumb_filename, dest_path);                
+        });
+
 }
 
 function checkCameraImageInfo(camera_id, filename, path)
