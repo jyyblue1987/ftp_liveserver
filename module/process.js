@@ -82,7 +82,7 @@ function runFTPServer()
                 {
                     console.info(`FTP server: upload successfully received - ${fileName}`); 
 
-                    onAddFiles(username, fileName);
+                    // onAddFiles(username, fileName);
                 }                
             }); 
            
