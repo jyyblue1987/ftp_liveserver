@@ -9,7 +9,8 @@ var sharp = require('sharp');
 var cr2Raw = require('cr2-raw');
 var sprintf = require("sprintf-js").sprintf,
     vsprintf = require("sprintf-js").vsprintf;
-var FtpSrv = require('ftp-srv');
+var {FtpSrv, FileSystem} = require('ftp-srv');
+const {createReadStream, createWriteStream, constants} = require('fs');
 
 var xml = fs.readFileSync('config.xml', 'utf-8');
 
@@ -73,20 +74,21 @@ function runFTPServer()
                 fs.mkdirSync(root_dir);
             }
 
-            // If connected, add a handler to confirm file uploads 
-            connection.on('STOR', (error, fileName) => { 
-                if (error) { 
-                    console.error(`FTP server error: could not receive file ${fileName} for upload ${error}`); 
-                } 
-                else
-                {
-                    console.info(`FTP server: upload successfully received - ${fileName}`); 
+            // // If connected, add a handler to confirm file uploads 
+            // connection.on('STOR', (error, fileName) => { 
+            //     if (error) { 
+            //         console.error(`FTP server error: could not receive file ${fileName} for upload ${error}`); 
+            //     } 
+            //     else
+            //     {
+            //         console.info(`FTP server: upload successfully received - ${fileName}`); 
 
-                    // onAddFiles(username, fileName);
-                }                
-            }); 
-           
-            resolve({root: root_dir});            
+            //         // onAddFiles(username, fileName);
+            //     }                
+            // }); 
+
+            var cwd = '/';           
+            resolve({root: root_dir, fs: new MyFileSystem(connection, {root: root_dir, cwd: cwd})});            
         } else { 
             reject(new Error('Unable to authenticate with FTP server: bad username or password')); 
         } 
@@ -104,6 +106,29 @@ function runFTPServer()
 }
 
 runFTPServer();
+
+class MyFileSystem extends FileSystem {
+    constructor(connection, { root, cwd } = {}) {
+        super(connection, root, cwd);        
+    }
+    
+    write(fileName, {append = false, start = undefined} = {}) {
+        // const {fsPath} = this._resolvePath(fileName);        
+        var fsPath = config.FTP_DIR + '/'  + '1' + '/' + fileName;
+        const stream = createWriteStream(fsPath, {flags: !append ? 'w+' : 'a+', start});
+        stream.on('error', () => fs.unlink(fsPath));
+
+        setTimeout(function() {
+            onAddFiles('1', fsPath);
+        }, 2000)
+      
+        return stream;
+    }
+
+    list(path) {
+
+    }
+}
 
 function spyFileChanges()
 {
